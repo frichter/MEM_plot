@@ -14,6 +14,9 @@ library(dplyr)
 plot_prefix = "/hpc/users/richtf01/chdiTrios/Felix/xhmm_test/plot_fam/fam"
 basename = "/hpc/users/richtf01/chdiTrios/Felix/xhmm_test/hg19.all.xhmm"
 JOB_TARGETS_TO_GENES = "/hpc/users/richtf01/chdiTrios/Felix/xhmm_test/hg19.annotated_targets.refseq.loci"
+# b37
+basename = "/sc/orga/projects/chdiTrios/ME_DEL/xhmm/xhmm_b37/postDcov/b37.xhmm"
+JOB_TARGETS_TO_GENES = "//sc/orga/projects/chdiTrios/ME_DEL/xhmm/xhmm_b37/postDcov/b37.annotated_targets.refseq.loci"
 
 ################
 # load MEM calls
@@ -31,8 +34,9 @@ sample_info_df = fam_table_list %>% bind_rows(.id = "SAMPLE") %>%
   group_by(SAMPLE, CHROM_ME) %>%
   summarise(START = START_ME[[1]], END = END_ME[[n()]]) %>%
   ungroup() %>%
-  rename(CHROM = CHROM_ME) %>%
-  mutate(CHROM = paste("chr", CHROM, sep = ""))
+  rename(CHROM = CHROM_ME) #%>%
+  # only paste chr for hg19, not b37
+  # mutate(CHROM = paste("chr", CHROM, sep = ""))
 
 
 ###################
@@ -146,8 +150,6 @@ PlotFamMEXHMM = function(SAMPLE, CHROM, START, END, dataList, TARGETS_CHR_BP1_BP
 
 t = sample_info_df %>% filter(SAMPLE == "1-04824", CHROM == 14)
 
-plot_XHMM_targets
-
 # test run a single individual
 t = sample_info_df[1, ]
 PlotFamMEXHMM(t$SAMPLE, t$CHROM, t$START, t$END, dataList, TARGETS_CHR_BP1_BP2)
@@ -179,7 +181,7 @@ start_i = 1337395
 end_i = 1431087
 
 # chr15 group
-chr_i = "chr15"
+chr_i = "15" # "chr15"
 start_i = 22800000 # min(sample_info_df$START) - 1
 end_i = max(sample_info_df$END) + 1
 sum(TARGETS_CHR_BP1_BP2$bp1 >= start_i &
@@ -189,7 +191,7 @@ sum(TARGETS_CHR_BP1_BP2$bp1 >= start_i &
 # plot by FAMILY
 plot_prefix = "/hpc/users/richtf01/chdiTrios/Felix/xhmm_test/chr15/fam_"
 # test on 1 individual
-PlotFamMEXHMM(sample_lo_list_other[[1]], chr_i, start_i, end_i,
+PlotFamMEXHMM(sample_list[[2]], chr_i, start_i, end_i,
   dataList, TARGETS_CHR_BP1_BP2, plot_prefix)
 # repeat for all other individuals
 lapply(sample_lo_list_other[[2]], function(x)
@@ -284,6 +286,9 @@ PlotSampleList(sample_list, chr_i, start_i, end_i, dataList,
 
 # identify probands with data in specified target regions
 # 1p35: targets 7:12, chr15 region: ???
+target_indices = which(TARGETS_CHR_BP1_BP2$bp1 >= start_i &
+    TARGETS_CHR_BP1_BP2$bp2 <= end_i &
+    TARGETS_CHR_BP1_BP2$chr == chr_i)
 # Extract read depth z-scores for these individuals
 sample_df = dataList[["PCA_NORM_Z_SCORES"]][, target_indices]
 sample_df = sample_df %>% as.data.frame %>% mutate(Blinded.ID = row.names(sample_df))
@@ -293,17 +298,17 @@ sample_df = sample_df %>% as.data.frame %>% mutate(Blinded.ID = row.names(sample
 sample_list = c("1-02711", "1-04652", "1-05084", "1-06498", "1-07442") # for 1p36
 sample_list = sample_info_df %>% filter(avail_in_xhmm) %>% select(SAMPLE) %>% unlist # for chr15
 
+# calculate cut-offs
 blinded_id_interest = sample_df$Blinded.ID %in% sample_list
 perColCutOffs = apply(sample_df %>% filter(blinded_id_interest) %>% select(-Blinded.ID), 2, max)
 
 # count the number of targets less than the cut-off for probands and parents
-id_index_to_keep = grep("-01$|-02$", row.names(dataList[["PCA_NORM_Z_SCORES"]]), invert = T)
 cutCount_vec = apply(sample_df %>% select(-Blinded.ID), 1, function(pca_values) sum(pca_values <= perColCutOffs + 0.5))
 sample_df$cutCount_empirical = cutCount_vec
 
 sample_lo_list = sample_df %>%
   filter(!grepl("-01$|-02$", Blinded.ID)) %>%
-  filter(cutCount_empirical >= 60) %>% # for chr15
+  filter(cutCount_empirical >= 30) %>% # for chr15
   # filter(cutCount_empirical >= 6 & `chr1:1387418-1387724` < -2) %>% # for 1p36
   select(Blinded.ID) %>% unlist
 names(sample_lo_list) = NULL
@@ -314,9 +319,12 @@ sample_lo_list_other = sample_lo_list[!(sample_lo_list %in% sample_list)]
 
 # sample_lo_list = lapply(sample_lo_list, function(x) as.character(unlist(paste(x, c("-01", "-02"), sep = ""))))
 
-plot_prefix = "/hpc/users/richtf01/chdiTrios/Felix/xhmm_test/chr15/parent_lo"
+# invert = F for parents, invert = T for probands
+id_index_to_keep = grep("-01$|-02$", row.names(dataList[["PCA_NORM_Z_SCORES"]]), invert = T)
+
+plot_prefix = "/hpc/users/richtf01/chdiTrios/Felix/xhmm_test/chr15/proband_lo_b37"
 PlotSampleList(sample_lo_list, chr_i, start_i, end_i, dataList,
-               TARGETS_CHR_BP1_BP2, plot_prefix, basename)
+               TARGETS_CHR_BP1_BP2, plot_prefix, basename, id_index_to_keep)
 
 
 ###############################
